@@ -17,6 +17,7 @@ def plot_bokeh(
     height=800,
     color_key_cmap="Spectral",
     point_size=None,
+    alpha=None,
     interactive_text_search=False,
 ):
     data = pd.DataFrame(points, columns=("x", "y"))
@@ -52,7 +53,10 @@ def plot_bokeh(
     else:
         tooltips = None
 
-    data["alpha"] = 1
+    if alpha is not None:
+        data["alpha"] = alpha
+    else:
+        data["alpha"] = 1
 
     data_source = bpl.ColumnDataSource(data)
 
