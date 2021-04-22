@@ -8,13 +8,13 @@ from tqdm import tqdm
 
 morf = morfeusz2.Morfeusz(generate=False)
 
-model_path = '/data/model/'
+model_path = 'model/iii/'
 doc_file = model_path + 'iii.csv'
 
 total = 291415
 
 df_reader = pd.read_csv(doc_file, usecols=['text'], chunksize=10000)
-docs_gen = [x for df in df_reader for x in df.text][:1000]
+docs_gen = (x for df in df_reader for x in df.text.to_list())
 
 with open('polish_stopwords.txt') as f:
     stop_words = [x.strip() for x in f]
@@ -64,7 +64,7 @@ embeddings_tfidf = tfidf_vectorizer.fit_transform(tqdm(docs, total=total))
 
 print("Saving embeddings..")
 
-with open(model_path + 'embeddings-tfidf-morf.pkl', "wb") as fOut:
+with open(model_path + 'tfidf-morf.pkl', "wb") as fOut:
     pickle.dump(embeddings_tfidf, fOut)
 
 print("done")
