@@ -1,12 +1,17 @@
-import pandas as pd
-import numpy as np
-import umap
 import pickle
 from os import path
+import pandas as pd
+import numpy as np
+
+ENABLE_UMAP = False
+SAVE_MAPS = False
+model_path = '/data/model/iii/'
+
+if ENABLE_UMAP:
+    import umap
 
 LEXRANK_TOP1,LEXRANK_TOP3,LEXRANK_WEIGHTED,TFIDF_TOP1,TFIDF_TOP3,TFIDF_WEIGHTED, TFIDF_MORF = 'lexrank-top1','lexrank-top3','lexrank-weighted','tfidf-top1','tfidf-top3','tfidf-weighted', 'tfidf-morf'
 LEXRANK_TOP1xTFIDF, LEXRANK_TOP3xTFIDF, LEXRANK_WEIGHTEDxTFIDF = 'lexrank-top1-xtfidf','lexrank-top3-xtfidf','lexrank-weighted-xtfidf'
-model_path = 'model/iii/'
 
 def filename(emb_type, dim=None, map=False):
     filename = emb_type 
@@ -35,7 +40,8 @@ def map_embeddings(embeddings, dim=5, metric='cosine'):
 def load_and_reduce_dim(name, dim):
     embeddings = load_file(filename(name))
     embeddings_map = map_embeddings(embeddings, dim)
-    save_file(embeddings_map, filename(name, dim, map=True))
+    if SAVE_MAPS:
+        save_file(embeddings_map, filename(name, dim, map=True))
     save_file(embeddings_map.embedding_, filename(name, dim))
     return embeddings_map
 
@@ -44,6 +50,9 @@ def load_embeddings(name, dim=5, map=False):
 
     if file_exists(filename_):
         return load_file(filename_)
+
+    if not ENABLE_UMAP:
+        raise Exception('File not found and UMAP not enabled')
 
     if map:
         print(f'map {filename_} not found, generating from full embeddings')
@@ -59,3 +68,27 @@ def load_embeddings(name, dim=5, map=False):
             embeddings_map = load_and_reduce_dim(name, dim)
 
         return embeddings_map.embedding_
+
+
+def load_clean_df():
+    df = pd.read_csv(model_path + 'iii.csv', index_col=0)
+    df.fillna('b/d', inplace=True)
+    df.rename(columns={"date": "data", "kad": "kadencja", "okreg": "okręg",
+            "posel": "poseł", "speaker": "mówca", "text": "treść"}, inplace=True)    
+
+    doc_words = load_file('tfidf-morf-top-words.pkl')
+    df['opis'] = [' | '.join(w) for w in doc_words]
+
+    topics = load_file('topics.pkl')
+    df['temat'] = topics
+
+    embeddings_3d = load_embeddings(LEXRANK_WEIGHTED, dim=3)
+    df['embedding_3d'] = np.asarray(embeddings_3d).tolist()
+
+    embeddings_2d = load_embeddings(LEXRANK_WEIGHTED, dim=2)
+    df['embedding_2d'] = np.asarray(embeddings_2d).tolist()
+
+    return df
+
+def drop_text(df):
+    return df.drop(columns="treść")
