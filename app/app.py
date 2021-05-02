@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import plotly.express as px
 import json
-from data_util import load_data, load_topics
+from data_util import load_data, load_session
 from plots_util import create_fig_scatter, create_fig_topics, create_fig_topics_over_time
 from elastic_util import get_embeddings, get_full_text, remap_embeddings
 
@@ -123,36 +123,24 @@ tab3_content = dbc.Card(
     dbc.CardBody(
         [
             dcc.Store(id='selected-doc-id'),
+            dbc.Row(dbc.Col(id='selected-doc')),
+            dbc.Button("Pokaż kontekst", id='show-session',
+                       style={'position': 'absolute', 'right': '20px', 'top': '20px'}),
             dbc.Row([
-                dbc.Col(dbc.Label('Mówca'), width=2),
-                dbc.Col(html.Span(id='selected-doc-speaker'))
-            ]),
-            dbc.Row([
-                dbc.Col(dbc.Label('Data'), width=2),
-                dbc.Col(html.Span(id='selected-doc-date'))
-            ]),
-            dbc.Row([
-                dbc.Col(dbc.Label('Klub'), width=2),
-                dbc.Col(html.Span(id='selected-doc-klub'))
-            ]),
-            dbc.Row([
-                dbc.Col(dbc.Label('Lista'), width=2),
-                dbc.Col(html.Span(id='selected-doc-lista'))
-            ]),
-            dbc.Row([
-                dbc.Col(dbc.Label('Partia'), width=2),
-                dbc.Col(html.Span(id='selected-doc-partia'))
-            ]),
-            dbc.Row([
-                dbc.Col(dbc.Label('Opis'), width=2),
-                dbc.Col(html.Span(id='selected-doc-desc'))
-            ]),
-            dbc.Row([
-                dbc.Col(dbc.Label('Treść'), width=2),
+                dbc.Col(dbc.Label('treść'), width=2),
                 dbc.Col(dcc.Loading(html.Div(id='selected-doc-fullText')))
             ])
         ]
     ),
+    className="mt-3",
+)
+
+tab4_content = dbc.Card([
+    dcc.Store(id='scrollto-div-id'),
+    dcc.Loading(dbc.CardBody(dbc.Col([
+        dbc.Row(dbc.Button('Pokaż wybraną wypowiedź',
+                id='scrollto-button', color='primary')),
+        dbc.Row(dbc.Col(id='tab-session-content'))])))],
     className="mt-3",
 )
 
@@ -162,7 +150,9 @@ app.layout = dbc.Container(
             dbc.Tab(tab1_content, label="Tematy", tab_id='tab-main'),
             dbc.Tab(tab2_content, label="Tematy w czasie", tab_id='tab-time'),
             dbc.Tab(tab3_content, label="Wybrana wypowiedź",
-                    disabled=True, id='tab-selected', tab_id='tab-selected')
+                    disabled=True, id='tab-selected', tab_id='tab-selected'),
+            dbc.Tab(tab4_content, label="Kontekst wypowiedzi",
+                    disabled=True, id='tab-session', tab_id='tab-session')
         ],
         id='tabs',
         active_tab='tab-main'
@@ -215,25 +205,23 @@ def update_selected_topic(clickData, selectionData):
 
 
 @app.callback(
-    [Output("tabs", "active_tab"), Output('tab-selected', 'disabled'),
+    [Output("tabs", "active_tab"),
+     Output('tab-selected', 'disabled'),
      Output('selected-doc-id', 'data'),
-     Output('selected-doc-speaker', 'children'),
-     Output('selected-doc-date', 'children'),
-     Output('selected-doc-klub', 'children'),
-     Output('selected-doc-lista', 'children'),
-     Output('selected-doc-partia', 'children'),
-     Output('selected-doc-desc', 'children')],
+     Output('selected-doc', 'children')],
     Input("graph-scatter", "clickData"))
 def on_doc_selected(clickData):
     if clickData is None:
-        return 'tab-main', True, *(None,)*7
+        return 'tab-main', True, *(None,)*2
 
     doc_id = clickData['points'][0]['customdata'][-1]
     doc = df[df.id == doc_id].squeeze()
-    doc = tuple(
-        doc[['id', 'mówca', 'data', 'klub', 'lista', 'partia', 'opis']].tolist())
 
-    return 'tab-selected', False, *doc
+    children = [dbc.Row([
+        dbc.Col(dbc.Label(item[0]), width=2), dbc.Col(html.Span(item[1]))
+    ]) for item in doc[['id', 'mówca', 'data', 'klub', 'lista', 'partia', 'opis']].items()]
+
+    return 'tab-selected', False, doc_id, children
 
 
 @app.callback(
@@ -244,6 +232,60 @@ def load_doc_text(doc_id):
         return get_full_text(doc_id)
     else:
         return 'Nie wybrano dokumentu'
+
+
+@app.callback(
+    [Output('tab-session-content', 'children'),
+     Output('scrollto-div-id', 'data')],
+    Input('show-session', 'n_clicks'),
+    State('selected-doc-id', 'data'))
+def load_session_tab(_, doc_id):
+    if doc_id is None:
+        return None, None
+
+    title, texts, speech_id = load_session(doc_id)
+
+    speech_number = next(i for i, t in enumerate(texts)
+                         if t['id'] == speech_id)
+
+    children = [
+        dbc.Row(html.H2(title, style={'margin': '20px 0'})),
+        * [dbc.Row([
+            dbc.Col(html.H4(t['id'][4:]), width=1,
+                    style={'textAlign': 'right'}),
+            dbc.Col([dbc.Row([
+                dbc.Col(s['speaker'], width=2),
+                dbc.Col(s['text'])], style={'borderBottom': '1px solid grey'}) for s in t['speeches']])
+        ], id=t['id'], style={'border': '1px solid red'} if t['id'] == speech_id else None)
+            for i, t in enumerate(texts) if abs(i - speech_number) <= 20]
+    ]
+    return children, speech_id
+
+
+@app.callback(
+    Output("tabs", "active_tab"),
+    Input('show-session', 'n_clicks'))
+def switch_to_session_tab(n):
+    if n == 0:
+        return 'tab-main'
+
+    return 'tab-session'
+
+
+app.clientside_callback(
+    """
+    function  scrollto(id, _) {
+        if (id) {
+            let element = document.getElementById(id);
+            element.scrollIntoView({behavior:'smooth'});
+        }
+        return id;
+    }
+    """,
+    Output('scrollto-div-id', 'children'),
+    [Input('scrollto-div-id', 'data'),
+     Input('scrollto-button', 'n_clicks')]
+)
 
 # @app.callback(
 #     Output('click-data','children'),
