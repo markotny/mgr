@@ -2,7 +2,7 @@ import pickle
 import os, sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_util import load_clean_df, drop_text, load_file, model_path
+from data import load_clean_df, drop_text, load_file, model_path
 
 df = load_clean_df()
 df = drop_text(df)

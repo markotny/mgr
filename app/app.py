@@ -5,105 +5,124 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
 import plotly.express as px
 import json
-from data_util import load_data, load_session
-from plots_util import create_fig_scatter, create_fig_topics, create_fig_topics_over_time
-from elastic_util import get_embeddings, get_full_text, remap_embeddings
+from util_data import load_data, load_session
+from util_plots import create_fig_scatter, create_fig_topics, create_fig_topics_over_time
+from util_elastic import get_topic_dict, get_full_text, remap_embeddings, search_speeches, search_topics
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 df = load_data()
 
+topics = get_topic_dict()
+topic_sizes = df['temat'].value_counts().to_dict()
+topics = {key: f'{val} ({topic_sizes[key]})' for key, val in topics.items()}
+
+df['opis tematu'] = [topics[t] for t in df.temat]
+topic_options = [{"label": val, "value": key} for key, val in topics.items()]
+
 fig_topics = create_fig_topics()
 
 fig_topics_over_time = create_fig_topics_over_time()
 
-scatter_plot_settings = dbc.Row(
-    [
-        dbc.Col(
-            dbc.DropdownMenu(
-                dcc.Checklist(
-                    id='graph-scatter-kads',
-                    options=[
-                        {'label': 'I (1991-1993)', 'value': 1},
-                        {'label': 'II (1993-1997)', 'value': 2},
-                        {'label': 'III (1997-2001)', 'value': 3},
-                        {'label': 'IV (2001-2005)', 'value': 4},
-                        {'label': 'V (2005-2007)', 'value': 5},
-                        {'label': 'VI (2007-2011)', 'value': 6},
-                        {'label': 'VII (2011-2015)', 'value': 7},
-                        {'label': 'VIII (2015-2019)', 'value': 8},
-                    ],
-                    value=[1, 2, 3, 4, 5, 6, 7, 8]
-                ),
-                label="Kadencje",
-            )
-        ),
-        dbc.Col(
-            dcc.Dropdown(
-                id='graph-scatter-dim',
+scatter_plot_settings = dbc.Row([
+    dbc.Col(
+        dbc.DropdownMenu(
+            dcc.Checklist(
+                id='graph-scatter-kads',
                 options=[
-                    {'label': '2D', 'value': 2},
-                    {'label': '3D', 'value': 3}
+                    {'label': 'I (1991-1993)', 'value': 1},
+                    {'label': 'II (1993-1997)', 'value': 2},
+                    {'label': 'III (1997-2001)', 'value': 3},
+                    {'label': 'IV (2001-2005)', 'value': 4},
+                    {'label': 'V (2005-2007)', 'value': 5},
+                    {'label': 'VI (2007-2011)', 'value': 6},
+                    {'label': 'VII (2011-2015)', 'value': 7},
+                    {'label': 'VIII (2015-2019)', 'value': 8},
                 ],
-                value=2
-            )
-        ),
-        dbc.Col(
-            dcc.Dropdown(
-                id='graph-scatter-coloring',
-                options=[
-                    {'label': 'Temat', 'value': 'temat_str'},
-                    {'label': 'Klub', 'value': 'klub'},
-                    {'label': 'Lista', 'value': 'lista'},
-                    {'label': 'Okręg', 'value': 'okręg'}
-                ],
-                value='temat_str'
-            )
-        ),
-        dbc.Col(
-            dcc.RadioItems(
-                id='graph-scatter-remap',
-                options=[
-                    {'label': 'Globalne', 'value': 0},
-                    {'label': 'Przelicz', 'value': 1}
-                ],
-                value=0
-            )
-        ),
-        dbc.Button("Zastosuj", id='apply-graph-scatter-filter', color="primary")
-    ],
+                value=[1, 2, 3, 4, 5, 6, 7, 8]
+            ),
+            label="Kadencje",
+        )
+    ),
+    dbc.Col(
+        dcc.Dropdown(
+            id='graph-scatter-dim',
+            options=[
+                {'label': '2D', 'value': 2},
+                {'label': '3D', 'value': 3}
+            ],
+            value=2
+        )
+    ),
+    dbc.Col(
+        dcc.Dropdown(
+            id='graph-scatter-coloring',
+            options=[
+                {'label': 'Temat', 'value': 'temat'},
+                {'label': 'Klub', 'value': 'klub'},
+                {'label': 'Lista', 'value': 'lista'},
+                {'label': 'Okręg', 'value': 'okręg'}
+            ],
+            value='temat'
+        )
+    ),
+    dbc.Col(
+        dbc.RadioItems(
+            id='graph-scatter-remap',
+            options=[
+                {'label': 'Globalne', 'value': 0},
+                {'label': 'Przelicz', 'value': 1}
+            ],
+            value=0
+        )
+    ),
+    dbc.Col(dbc.Button("Zastosuj", id='apply-graph-scatter-filter', color="primary", className='ml-auto'), className='d-flex')],
+    style={'height': '50px'},
     justify="between",
+    align="center",
+)
+speech_search = dbc.Row([
+    dbc.Col(dcc.Input(id="speech-search", type="text", value='',
+                      placeholder='Filtruj wypowiedzi', style={'width': '100%'}), width=8),
+    dbc.Col(dbc.Label('Próg:', html_for='speech-search-threshold'),
+            style={'paddingRight': '0', 'textAlign': 'right'}),
+    dbc.Col(dcc.Input(id='speech-search-threshold', type='number',
+            value=0.5, min=0.1, max=0.99, step=0.05, style={'width': '100%'})),
+    dbc.Col(dbc.Button("Szukaj", id='speech-search-btn',
+            color="primary", className='ml-auto'), className='d-flex'),
+    dcc.Store(id="speech-search-ids")],
+    style={'height': '50px'},
+    justify="between",
+    align="center",
 )
 
 tab1_content = dbc.Card(
-    dbc.CardBody(
-        [
-            dbc.Row(
-                [
-                    dbc.Col([
-                        scatter_plot_settings,
-                        html.Div(id='selected-topics',
-                                 style={'white-space': 'pre-line'}),
-                        dcc.Store(id='selected-topics-ids'),
-                        dcc.Loading(dcc.Graph(id='graph-scatter'))
-                    ]),
-                    dbc.Col(dcc.Graph(
-                        id='graph-topics',
-                        figure=fig_topics
-                    ))
-                ]
-            ),
-            # dbc.Row(html.Div([
-            #     dcc.Markdown("""
-            #     **Click Data**
+    dbc.CardBody([dbc.Row([
+        dbc.Col([
+            speech_search,
+            scatter_plot_settings,
+            dcc.Store(id="graph-filter-data"),
+            dcc.Loading(html.Div(id="speech-search-result",
+                style={'textAlign': 'right', 'height': '50px'})),
+            dbc.Row(dcc.Graph(id='graph-scatter', figure=px.scatter()))], width=6),
+        dbc.Col([
+            dcc.Input(id="topic-search", type="text", value='',
+                      placeholder='Filtruj tematy', style={'width': '100%'}),
+            dcc.Loading(dcc.Dropdown(id="topic-select", value=[],
+                        options=topic_options, placeholder='Wybierz tematy', multi=True)),
+            dcc.Graph(id='graph-topics', figure=fig_topics)], width=6)
+    ]),
+        # dbc.Row(html.Div([
+        #     dcc.Markdown("""
+        #     **Click Data**
 
-            #     Click on points in the graph.
-            #     """),
-            #     html.Pre(id='click-data')]))
-        ]
-    ),
+        #     Click on points in the graph.
+        #     """),
+        #     html.Pre(id='click-data')]))
+    ]),
     className="mt-3",
 )
 
@@ -161,47 +180,118 @@ app.layout = dbc.Container(
 )
 
 
+def apply_filter(speechIds, topicIds, kads):
+    filtered_df = df[df['kadencja'].isin(kads)]
+    if speechIds is not None and len(speechIds) > 0:
+        filtered_df = filtered_df[filtered_df['id'].isin(speechIds)]
+
+    if isinstance(topicIds, str):
+        topicIds = [topicIds]
+    if topicIds is not None and len(topicIds) > 0:
+        filtered_df = filtered_df[filtered_df['temat'].isin(topicIds)]
+
+    return filtered_df
+
+
 @app.callback(
-    Output('graph-scatter', 'figure'),
-    [Input('apply-graph-scatter-filter', 'n_clicks'),
-     Input("selected-topics-ids", "data")],
-    [State('graph-scatter-remap', 'value'),
+    [Output('speech-search-result', 'children'),
+     Output('graph-scatter', 'figure'),
+     Output('graph-filter-data', 'data')],
+    Input('apply-graph-scatter-filter', 'n_clicks'),
+    [State('speech-search-ids', 'data'),
+     State("topic-select", "value"),
+     State('graph-scatter-remap', 'value'),
      State('graph-scatter-kads', 'value'),
      State('graph-scatter-dim', 'value'),
      State('graph-scatter-coloring', 'value')])
-def update_scatter_fig(_, topicIds, remap, kads, dim, coloring):
-    filtered_df = df[df['kadencja'].isin(kads)]
-    opacity = 0.1
-    if topicIds is not None and len(topicIds) > 0:
-        filtered_df = filtered_df[filtered_df['temat'].isin(topicIds)]
-        opacity = 1.0
-        if remap == 1:
-            filtered_df = remap_embeddings(filtered_df, dim)
+def update_scatter_fig(n, speechIds, topicIds, remap, kads, dim, coloring):
+    if n is None or n < 0:
+        raise PreventUpdate
 
-    fig = create_fig_scatter(filtered_df, dim, coloring, opacity)
+    filter_data = dict(speechIds=speechIds, topicIds=topicIds, kads=kads)
+    filtered_df = apply_filter(speechIds, topicIds, kads)
 
-    return fig
+    if len(filtered_df) == 0:
+        return 'Nie znaleziono żadnych pasujących wypowiedzi', px.scatter(), filter_data
+
+    if remap == 1:
+        filtered_df = remap_embeddings(filtered_df, dim)
+
+    fig = create_fig_scatter(filtered_df, dim, coloring)
+
+    return f'Wypowiedzi na wykresie: {len(filtered_df)}', fig, filter_data
 
 
 @app.callback(
-    [Output('selected-topics', 'children'),
-     Output('selected-topics-ids', 'data')],
-    [Input("graph-topics", "clickData"), Input('graph-topics', 'selectedData')])
-def update_selected_topic(clickData, selectionData):
+    [Output('speech-search-result', 'children'),
+     Output('speech-search-ids', 'data')],
+    [Input('speech-search', 'n_submit'),
+     Input('speech-search-btn', 'n_clicks')],
+    [State('speech-search', 'value'),
+     State('speech-search-threshold', 'value'),
+     State('graph-filter-data', 'data')],
+    prevent_initial_call=True)
+def update_speeches(n_sub, n_clk, value, threshold, filter_data):
+    if value is None or len(value) < 1:
+        return '', []
+    matched_speeches = search_speeches(value, threshold)
+
+    ids = [s['_id'] for s in matched_speeches]
+
+    if filter_data is not None:
+        filtered_df = apply_filter(
+            ids, filter_data['topicIds'], filter_data['kads'])
+        return f'Znaleziono: {len(ids)}. Z filtrami: {len(filtered_df)}', ids
+
+    return f'Znaleziono: {len(ids)}', ids
+
+
+@app.callback(
+    [Output('graph-topics', 'figure'),
+     Output("topic-select", "options"), Output("topic-select", "value")],
+    Input("topic-search", "n_submit"),
+    [State("topic-search", "value"), State('graph-topics', 'figure')],
+    prevent_initial_call=True)
+def update_topics(n, value, figure):
+    if value is None or len(value) < 1:
+        return fig_topics, topic_options, []
+
+    matched_topics = search_topics(value)
+
+    options = [{"label": '{:.2f}: {}'.format(t['_score']-1.0, topics[t['_id']]),
+                "value": t['_id']} for t in matched_topics]
+
+    topic_ids = [t['_id'] for t in matched_topics]
+    figure['data'][0]['marker']['opacity'] = [
+        0.5 if t in topic_ids else 0.1 for t in topics.keys() if t != '-1']
+    return figure, options, []
+
+
+@app.callback(
+    Output('topic-select', 'value'),
+    [Input("graph-topics", "clickData"),
+     Input('graph-topics', 'selectedData')],
+    State('topic-select', 'options'),
+    prevent_initial_call=True)
+def update_selected_topic(clickData, selectionData, options):
     ctx = dash.callback_context
     if ctx.triggered is None or ctx.triggered[0]['value'] is None:
-        return 'Aby wybrać temat klinkij na prawym wykresie', []
+        raise PreventUpdate
+
+    valid_ids = [opt['value'] for opt in options]
 
     if ctx.triggered[0]['prop_id'] == 'graph-topics.clickData':
-        topic_index = clickData['points'][0]['pointIndex']
-        topic_words = clickData['points'][0]['customdata'][3]
-        return f'Wybrany temat: {topic_index} - {topic_words}', [topic_index]
+        topic_index = str(clickData['points'][0]['pointIndex'])
+        if topic_index not in valid_ids:
+            raise PreventUpdate
+        return str(topic_index)
     else:
-        topic_indexes = [point['pointIndex']
+        topic_indexes = [str(point['pointIndex'])
                          for point in selectionData['points']]
-        topics = ',\n'.join(
-            [f"{point['pointIndex']} - {point['customdata'][3]}" for point in selectionData['points']])
-        return f'Wybrane tematy: {topics}', topic_indexes
+        topic_indexes = [t for t in topic_indexes if t in valid_ids]
+        if len(topic_indexes) < 1:
+            raise PreventUpdate
+        return topic_indexes
 
 
 @app.callback(
@@ -209,10 +299,11 @@ def update_selected_topic(clickData, selectionData):
      Output('tab-selected', 'disabled'),
      Output('selected-doc-id', 'data'),
      Output('selected-doc', 'children')],
-    Input("graph-scatter", "clickData"))
+    Input("graph-scatter", "clickData"),
+    prevent_initial_call=True)
 def on_doc_selected(clickData):
     if clickData is None:
-        return 'tab-main', True, *(None,)*2
+        raise PreventUpdate
 
     doc_id = clickData['points'][0]['customdata'][-1]
     doc = df[df.id == doc_id].squeeze()
@@ -226,7 +317,8 @@ def on_doc_selected(clickData):
 
 @app.callback(
     Output('selected-doc-fullText', 'children'),
-    Input('selected-doc-id', 'data'))
+    Input('selected-doc-id', 'data'),
+    prevent_initial_call=True)
 def load_doc_text(doc_id):
     if doc_id is not None:
         return get_full_text(doc_id)
@@ -238,10 +330,11 @@ def load_doc_text(doc_id):
     [Output('tab-session-content', 'children'),
      Output('scrollto-div-id', 'data')],
     Input('show-session', 'n_clicks'),
-    State('selected-doc-id', 'data'))
+    State('selected-doc-id', 'data'),
+    prevent_initial_call=True)
 def load_session_tab(_, doc_id):
     if doc_id is None:
-        return None, None
+        raise PreventUpdate
 
     title, texts, speech_id = load_session(doc_id)
 
@@ -263,18 +356,19 @@ def load_session_tab(_, doc_id):
 
 
 @app.callback(
-    Output("tabs", "active_tab"),
-    Input('show-session', 'n_clicks'))
+    [Output("tabs", "active_tab"), Output('tab-session', 'disabled')],
+    Input('show-session', 'n_clicks'),
+    prevent_initial_call=True)
 def switch_to_session_tab(n):
-    if n == 0:
-        return 'tab-main'
+    if n is not None and n > 0:
+        return 'tab-session', False
 
-    return 'tab-session'
+    raise PreventUpdate
 
 
 app.clientside_callback(
     """
-    function  scrollto(id, _) {
+    function(id, _) {
         if (id) {
             let element = document.getElementById(id);
             element.scrollIntoView({behavior:'smooth'});
@@ -284,15 +378,21 @@ app.clientside_callback(
     """,
     Output('scrollto-div-id', 'children'),
     [Input('scrollto-div-id', 'data'),
-     Input('scrollto-button', 'n_clicks')]
+     Input('scrollto-button', 'n_clicks')],
+    prevent_initial_call=True
 )
 
-# @app.callback(
-#     Output('click-data','children'),
-#     Input('graph-topics','clickData'))
-# def onClick(clickData):
-#     return json.dumps(clickData, indent=2)
-
+app.clientside_callback(
+    """
+    function(data) {
+        console.log(data)
+        return 'ok';
+    }
+    """,
+    Output('graph-filter-data', 'children'),
+    Input('graph-filter-data', 'data'),
+    prevent_initial_call=True
+)
 
 if __name__ == '__main__':
     app.run_server(debug=True)
