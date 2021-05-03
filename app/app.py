@@ -23,13 +23,17 @@ topics = {key: f'{val} ({topic_sizes[key]})' for key, val in topics.items()}
 df['opis tematu'] = [topics[t] for t in df.temat]
 topic_options = [{"label": val, "value": key} for key, val in topics.items()]
 
+fig_scatter_default = px.scatter(
+    template="simple_white",
+    width=900, height=800
+)
+
 fig_topics = create_fig_topics()
 
 fig_topics_over_time = create_fig_topics_over_time()
 
 scatter_plot_settings = dbc.Row([
-    dbc.Col(
-        dbc.DropdownMenu(
+    dbc.Col(dbc.DropdownMenu(
             dcc.Checklist(
                 id='graph-scatter-kads',
                 options=[
@@ -44,41 +48,35 @@ scatter_plot_settings = dbc.Row([
                 ],
                 value=[1, 2, 3, 4, 5, 6, 7, 8]
             ),
-            label="Kadencje",
-        )
-    ),
-    dbc.Col(
-        dcc.Dropdown(
+            label="Kadencje")),
+    dbc.Col(dcc.Dropdown(
             id='graph-scatter-dim',
             options=[
                 {'label': '2D', 'value': 2},
                 {'label': '3D', 'value': 3}
             ],
-            value=2
-        )
-    ),
-    dbc.Col(
-        dcc.Dropdown(
+            value=2)),
+    dbc.Col(dcc.Dropdown(
             id='graph-scatter-coloring',
             options=[
                 {'label': 'Temat', 'value': 'temat'},
                 {'label': 'Klub', 'value': 'klub'},
                 {'label': 'Lista', 'value': 'lista'},
-                {'label': 'Okręg', 'value': 'okręg'}
+                {'label': 'Województwo', 'value': 'województwo'}
             ],
-            value='temat'
-        )
-    ),
-    dbc.Col(
-        dbc.RadioItems(
+            value='temat')),
+    dbc.Col(dbc.RadioItems(
             id='graph-scatter-remap',
             options=[
                 {'label': 'Globalne', 'value': 0},
                 {'label': 'Przelicz', 'value': 1}
             ],
-            value=0
-        )
-    ),
+            value=0)),
+    dbc.Col(dbc.Row([
+        dbc.Col(dbc.Label('n:', html_for='graph-scatter-remap-neighbors'),
+                style={'paddingRight': '0', 'textAlign': 'right'}),
+        dbc.Col(dcc.Input(id='graph-scatter-remap-neighbors', type='number', disabled=True,
+                          value=10, min=5, max=100, step=5, style={'width': '100%'}))])),
     dbc.Col(dbc.Button("Zastosuj", id='apply-graph-scatter-filter', color="primary", className='ml-auto'), className='d-flex')],
     style={'height': '50px'},
     justify="between",
@@ -107,7 +105,7 @@ tab1_content = dbc.Card(
             dcc.Store(id="graph-filter-data"),
             dcc.Loading(html.Div(id="speech-search-result",
                 style={'textAlign': 'right', 'height': '50px'})),
-            dbc.Row(dcc.Graph(id='graph-scatter', figure=px.scatter()))], width=6),
+            dbc.Row(dcc.Graph(id='graph-scatter', figure=fig_scatter_default))], width=6),
         dbc.Col([
             dcc.Input(id="topic-search", type="text", value='',
                       placeholder='Filtruj tematy', style={'width': '100%'}),
@@ -193,7 +191,7 @@ def apply_filter(speechIds, topicIds, kads):
     return filtered_df
 
 
-@app.callback(
+@ app.callback(
     [Output('speech-search-result', 'children'),
      Output('graph-scatter', 'figure'),
      Output('graph-filter-data', 'data')],
@@ -201,10 +199,11 @@ def apply_filter(speechIds, topicIds, kads):
     [State('speech-search-ids', 'data'),
      State("topic-select", "value"),
      State('graph-scatter-remap', 'value'),
+     State('graph-scatter-remap-neighbors', 'value'),
      State('graph-scatter-kads', 'value'),
      State('graph-scatter-dim', 'value'),
      State('graph-scatter-coloring', 'value')])
-def update_scatter_fig(n, speechIds, topicIds, remap, kads, dim, coloring):
+def update_scatter_fig(n, speechIds, topicIds, remap, map_neighbors, kads, dim, coloring):
     if n is None or n < 0:
         raise PreventUpdate
 
@@ -212,17 +211,17 @@ def update_scatter_fig(n, speechIds, topicIds, remap, kads, dim, coloring):
     filtered_df = apply_filter(speechIds, topicIds, kads)
 
     if len(filtered_df) == 0:
-        return 'Nie znaleziono żadnych pasujących wypowiedzi', px.scatter(), filter_data
+        return 'Nie znaleziono żadnych pasujących wypowiedzi', fig_scatter_default, filter_data
 
     if remap == 1:
-        filtered_df = remap_embeddings(filtered_df, dim)
+        filtered_df = remap_embeddings(filtered_df, dim, map_neighbors)
 
     fig = create_fig_scatter(filtered_df, dim, coloring)
 
     return f'Wypowiedzi na wykresie: {len(filtered_df)}', fig, filter_data
 
 
-@app.callback(
+@ app.callback(
     [Output('speech-search-result', 'children'),
      Output('speech-search-ids', 'data')],
     [Input('speech-search', 'n_submit'),
@@ -246,7 +245,7 @@ def update_speeches(n_sub, n_clk, value, threshold, filter_data):
     return f'Znaleziono: {len(ids)}', ids
 
 
-@app.callback(
+@ app.callback(
     [Output('graph-topics', 'figure'),
      Output("topic-select", "options"), Output("topic-select", "value")],
     Input("topic-search", "n_submit"),
@@ -267,7 +266,7 @@ def update_topics(n, value, figure):
     return figure, options, []
 
 
-@app.callback(
+@ app.callback(
     Output('topic-select', 'value'),
     [Input("graph-topics", "clickData"),
      Input('graph-topics', 'selectedData')],
@@ -294,7 +293,7 @@ def update_selected_topic(clickData, selectionData, options):
         return topic_indexes
 
 
-@app.callback(
+@ app.callback(
     [Output("tabs", "active_tab"),
      Output('tab-selected', 'disabled'),
      Output('selected-doc-id', 'data'),
@@ -315,7 +314,14 @@ def on_doc_selected(clickData):
     return 'tab-selected', False, doc_id, children
 
 
-@app.callback(
+@ app.callback(
+    Output('graph-scatter-remap-neighbors', 'disabled'),
+    Input('graph-scatter-remap', 'value'))
+def enable_remap_input(value):
+    return value == 0
+
+
+@ app.callback(
     Output('selected-doc-fullText', 'children'),
     Input('selected-doc-id', 'data'),
     prevent_initial_call=True)
@@ -326,7 +332,7 @@ def load_doc_text(doc_id):
         return 'Nie wybrano dokumentu'
 
 
-@app.callback(
+@ app.callback(
     [Output('tab-session-content', 'children'),
      Output('scrollto-div-id', 'data')],
     Input('show-session', 'n_clicks'),

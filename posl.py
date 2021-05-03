@@ -107,8 +107,8 @@ def clean_data(df):
     df.fillna("",inplace=True)
     df['okreg'] = [o and re.sub(r'^\d+ ', '', o) for o in df['okreg']]
     df['okreg'] = df['okreg'].replace(
-        ['044', 'Bielsko Biała', 'Bielsko- Biała', 'Kędzierzyn Koźle', 'Skarżysko Kamienna'],
-        ['Koźle', 'Bielsko-Biała','Bielsko-Biała', 'Kędzierzyn-Koźle', 'Skarżysko-Kamienna'])
+        ['044', 'Bielsko Biała', 'Bielsko- Biała', 'Kędzierzyn Koźle', 'Skarżysko Kamienna', 'Gorzów'],
+        ['Koźle', 'Bielsko-Biała','Bielsko-Biała', 'Kędzierzyn-Koźle', 'Skarżysko-Kamienna', 'Gorzów Wielkopolski'])
     df['okreg'] = df['okreg'].replace(
         ['Kraków Nowa Huta', 'Kraków Nowa-Huta', 'Kraków Podgórze','Kraków Śródmieście','Kraków-Miasto', 'Kraków-Nowa Huta', 'Kraków-Podgórze', 'Kraków-Województwo', 'Kraków-Śródmieście'],
         'Kraków')

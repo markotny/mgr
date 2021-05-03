@@ -55,14 +55,15 @@ def create_fig_scatter(df, dim=2, color_category='temat'):
                 active=1,
                 currentvalue={"prefix": "Rozmiar: "},
                 steps=[dict(args=["marker.size", x], label=x,
-                            method="restyle") for x in range(1, 11)]
+                            method="restyle") for x in range(1, 11)],
+                pad={'r': 400}
             ),
             dict(
                 active=4,
                 currentvalue={"prefix": "Alfa: "},
                 steps=[dict(args=["marker.opacity", x], label="%.1f" %
                             x, method="restyle") for x in np.arange(0.1, 1.1, 0.1)],
-                pad={'t': 100}
+                pad={'l': 400}
             )
         ]
     )

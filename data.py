@@ -79,6 +79,11 @@ def load_clean_df():
     doc_words = load_file('tfidf-morf-top-words.pkl')
     df['opis'] = [' | '.join(w) for w in doc_words]
 
+    df['okręg'] = df['okręg'].replace('Gorzów', 'Gorzów Wielkopolski')
+
+    wojew = pickle.load(open('/home/marcin/mgr/parsed/wojew.pkl', 'rb'))
+    df['województwo'] = [wojew[o] if o != 'b/d' else 'b/d' for o in df['okręg']]
+
     topics = load_file('topics.pkl')
     df['temat'] = topics
 

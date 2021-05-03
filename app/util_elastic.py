@@ -71,13 +71,13 @@ def get_topic_dict():
     return topic_dict
 
 
-def remap_embeddings(df, dim):
+def remap_embeddings(df, dim, n_neighbors=10):
     embeddings = get_embeddings(df.id.to_list())
     embeddings = [{'id': e['_id'], 'embedding': e['_source']['embedding']}
                   for e in embeddings]
     dfe = pd.DataFrame(embeddings)
     df = pd.merge(df, dfe, on='id')
-    mapped = umap.UMAP(n_neighbors=10,
+    mapped = umap.UMAP(n_neighbors=n_neighbors,
                        n_components=dim,
                        metric='cosine',
                        min_dist=0.0).fit_transform(df.embedding.to_list())
