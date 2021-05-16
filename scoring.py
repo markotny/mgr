@@ -22,13 +22,13 @@ def score_coherence(docs, embeddings, min_cluster_size, min_samples):
     topic_words, tokens, topics, topics_all = _prepare_bertopic(
         docs, embeddings, min_cluster_size, min_samples)
 
-    not_found = (topics_all == -1).sum()
-    logging.info('not found', not_found, not_found / len(topics_all))
-
     top, count = np.unique(topics, return_counts=True)
     not_found = count[np.where(top == -1)][0]
     logging.info('total: {}, with topics: {}, topics: {}'.format(
         len(topics), len(topics) - not_found, len(top)))
+
+    not_found = (topics_all == -1).sum()
+    logging.info('not found', not_found, not_found / len(topics_all))
 
     dictionary = corpora.Dictionary(tokens)
 

@@ -6,6 +6,7 @@ from glob import glob
 from scoring import score_consistency, score_coherence
 from os import environ, path
 import logging
+logging.basicConfig(level = logging.INFO)
 
 environ['TOKENIZERS_PARALLELISM']="true"
 
@@ -30,6 +31,9 @@ with open(output_file, 'a+') as file_out:
             continue
 
         for n_neighbors in [5, 10, 15, 20]:
+            if (emb, str(n_neighbors), 'None', 'None') in scored:
+                continue
+
             embeddings = load_embeddings(emb, dim=5, n_neighbors=n_neighbors)
             if embeddings is None:
                 logging.warning(f'SEGFAULT during UMAP for {emb} ({n_neighbors}) ;c')
@@ -41,7 +45,7 @@ with open(output_file, 'a+') as file_out:
                 if current in scored:
                     continue
 
-                logging.info('scoring..', emb, min_cluster_size, min_samples)
+                logging.info('scoring.. ' + ','.join(current))
                 score_c_v, score_u_mass, topics, not_found, support = score_coherence(docs, embeddings, min_cluster_size, min_samples)
 
                 file_out.write(','.join(current) + f',{len(np.unique(topics))},{not_found},{support},{score_c_v},{score_u_mass}')
