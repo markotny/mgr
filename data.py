@@ -3,50 +3,53 @@ from os import path
 import pandas as pd
 import numpy as np
 
-ENABLE_UMAP = False
-SAVE_MAPS = False
-model_path = '/data/model/iii/'
+ENABLE_UMAP = True
+model_path = 'model/iii/'
 
 if ENABLE_UMAP:
     import umap
+    from sigsev_guard import sigsev_guard
 
-LEXRANK_TOP1,LEXRANK_TOP3,LEXRANK_WEIGHTED,TFIDF_TOP1,TFIDF_TOP3,TFIDF_WEIGHTED, TFIDF_MORF = 'lexrank-top1','lexrank-top3','lexrank-weighted','tfidf-top1','tfidf-top3','tfidf-weighted', 'tfidf-morf'
-LEXRANK_TOP1xTFIDF, LEXRANK_TOP3xTFIDF, LEXRANK_WEIGHTEDxTFIDF = 'lexrank-top1-xtfidf','lexrank-top3-xtfidf','lexrank-weighted-xtfidf'
+DEFAULT, MEAN, LEXRANK_TOP1, LEXRANK_TOP5, LEXRANK_WEIGHTED, TFIDF_TOP1, TFIDF_TOP5, TFIDF_WEIGHTED, TFIDF_MORF = 'default', 'mean', 'lexrank-top1', 'lexrank-top5', 'lexrank-weighted', 'tfidf-top1', 'tfidf-top5', 'tfidf-weighted', 'tfidf-morf'
+LEXRANK_TOP1xTFIDF, LEXRANK_TOP3xTFIDF, LEXRANK_WEIGHTEDxTFIDF = 'lexrank-top1-xtfidf', 'lexrank-top3-xtfidf', 'lexrank-weighted-xtfidf'
 
-def filename(emb_type, dim=None, map=False):
-    filename = emb_type 
+
+def emb_filename(emb, dim=None, n_neighbors=None):
+    filename = emb if '.pkl' not in emb else emb[:-4]
     if dim is not None:
-        filename += f'-{dim}d'
-    if map:
-        filename += '-map'
+        filename = f'mapped/{filename}-{dim}d-{n_neighbors}'
 
-    return filename + '.pkl'
+    return 'embeddings/' + filename + '.pkl'
+
 
 def save_file(obj, name):
     pickle.dump(obj, open(model_path + name, 'wb'))
 
+
 def load_file(name):
     return pickle.load(open(model_path + name, 'rb'))
+
 
 def file_exists(name):
     return path.exists(model_path + name)
 
-def map_embeddings(embeddings, dim=5, metric='cosine'):
-    return umap.UMAP(n_neighbors=15,
-                     n_components=dim,
-                     min_dist=0.0,
-                     metric=metric).fit(embeddings)
 
-def load_and_reduce_dim(name, dim):
-    embeddings = load_file(filename(name))
-    embeddings_map = map_embeddings(embeddings, dim)
-    if SAVE_MAPS:
-        save_file(embeddings_map, filename(name, dim, map=True))
-    save_file(embeddings_map.embedding_, filename(name, dim))
-    return embeddings_map
+@sigsev_guard(default_value=None, timeout=500)
+def load_and_reduce_dim(name, dim, n_neighbors):
+    embeddings = load_file(emb_filename(name))
+    metric = 'cosine' if 'tfidf' not in name else 'hellinger'
 
-def load_embeddings(name, dim=5, map=False):
-    filename_ = filename(name, dim, map)
+    embeddings_mapped = umap.UMAP(n_neighbors=n_neighbors,
+                                  n_components=dim,
+                                  min_dist=0.0,
+                                  metric=metric).fit_transform(embeddings)
+
+    save_file(embeddings_mapped, emb_filename(name, dim, n_neighbors))
+    return embeddings_mapped
+
+
+def load_embeddings(name, dim=5, n_neighbors=15):
+    filename_ = emb_filename(name, dim, n_neighbors)
 
     if file_exists(filename_):
         return load_file(filename_)
@@ -54,27 +57,17 @@ def load_embeddings(name, dim=5, map=False):
     if not ENABLE_UMAP:
         raise Exception('File not found and UMAP not enabled')
 
-    if map:
-        print(f'map {filename_} not found, generating from full embeddings')
-        embeddings_map = load_and_reduce_dim(name, dim)
-        return embeddings_map
-    else:
-        if file_exists(filename(name, dim, map=True)):
-            print(f'embeddings {filename_} not found but found map for same dim')
-            embeddings_map = load_file(filename(name, dim, map=True))
-            save_file(embeddings_map.embedding_, filename(name, dim))
-        else:
-            print(f'embeddings {filename_} not found, generating from full embeddings')
-            embeddings_map = load_and_reduce_dim(name, dim)
+    print(f'{filename_} not found, generating from full embeddings')
+    embeddings_mapped = load_and_reduce_dim(name, dim, n_neighbors)
 
-        return embeddings_map.embedding_
+    return embeddings_mapped
 
 
 def load_clean_df():
     df = pd.read_csv(model_path + 'iii.csv', index_col=0)
     df.fillna('b/d', inplace=True)
     df.rename(columns={"date": "data", "kad": "kadencja", "okreg": "okręg",
-            "posel": "poseł", "speaker": "mówca", "text": "treść"}, inplace=True)    
+                       "posel": "poseł", "speaker": "mówca", "text": "treść"}, inplace=True)
 
     doc_words = load_file('tfidf-morf-top-words.pkl')
     df['opis'] = [' | '.join(w) for w in doc_words]
@@ -94,6 +87,7 @@ def load_clean_df():
     df['embedding_2d'] = np.asarray(embeddings_2d).tolist()
 
     return df
+
 
 def drop_text(df):
     return df.drop(columns="treść")
