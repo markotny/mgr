@@ -1,0 +1,22 @@
+{
+	"name": "mgr-TF-GPU",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"mounts": [
+		"source=/data/model,target=/data/model,type=bind,consistency=cached"
+	  ],
+
+	"runArgs": ["--gpus=all"],
+
+	"extensions": [
+		"ms-python.python",
+		"ms-python.vscode-pylance",
+		"ms-toolsai.jupyter",
+		"mutantdino.resourcemonitor"
+	],
+	"settings": {
+		"python.languageServer": "Pylance",
+		"jupyter.alwaysTrustNotebooks": true
+	}
+}

@@ -69,6 +69,10 @@ def load_embeddings(name, dim=5, map=False):
 
         return embeddings_map.embedding_
 
+def load_stopwords():
+    with open('polish_stopwords.txt') as f:
+        stop_words = [x.strip() for x in f]
+    return set(stop_words)
 
 def load_clean_df():
     df = pd.read_csv(model_path + 'iii.csv', index_col=0)

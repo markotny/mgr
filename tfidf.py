@@ -1,28 +1,27 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
-from tfidf_morfeusz import MorfeuszAnalyser
+from morfeusz_spacy_analyser import SpacyMorfeuszAnalyser
 import pandas as pd
 import numpy as np
 import pickle
 from multiprocessing import Pool
 from tqdm import tqdm
 
-model_path = 'model/iii/'
-doc_file = model_path + 'iii.csv'
-
+model_path = '/data/model/iii/'
+parsed_docs_file = model_path + 'spacy-docs/iii-spacy-docs'
 total = 291415
 
-df_reader = pd.read_csv(doc_file, usecols=['text'], chunksize=10000)
-docs_gen = (x for df in df_reader for x in df.text.to_list())
+def load(kad):
+    with open(f'{parsed_docs_file}-{kad}.pkl', "rb") as f:
+        while True:
+            try:
+                yield pickle.load(f)
+            except EOFError:
+                break
 
-analyser = MorfeuszAnalyser()
+tokens = (tokens for kad in range(1,9) for tokens in load(kad))
 
-print("generating lemmatized ngrams..")
-with Pool(8) as p:
-    docs = list(tqdm(p.imap(analyser, docs_gen), total=total))
-
-print("calculating tf-idf..")
 tfidf_vectorizer = TfidfVectorizer(analyzer=lambda x: x, min_df=5)
-embeddings_tfidf = tfidf_vectorizer.fit_transform(tqdm(docs, total=total))
+embeddings_tfidf = tfidf_vectorizer.fit_transform(tqdm(tokens, total=total))
 
 print("Saving embeddings..")
 
@@ -33,7 +32,7 @@ print("done")
 
 feature_names = np.array(tfidf_vectorizer.get_feature_names())
 
-def get_top_tf_idf_words(response, top_n=5):
+def get_top_tf_idf_words(response, top_n=10):
     sorted_emb = np.argsort(response.data)[:-(top_n+1):-1]
     return feature_names[response.indices[sorted_emb]]
 
