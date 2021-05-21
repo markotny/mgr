@@ -25,7 +25,7 @@ else:
         f.write('embedding,n_neighbors,min_cluster_size,min_samples,topics_num,not_found,support,c_v,u_mass,c_su,c_cu\n')
 
 with open(output_file, 'a+') as file_out:
-    for emb_file in tqdm(sorted(glob(model_path + 'embeddings/*')), position=0):
+    for emb_file in tqdm(sorted(glob(model_path + 'embeddings/*.pkl')), position=0):
         emb = emb_file.split('/')[-1][:-4]
         if emb in completed:
             continue

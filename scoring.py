@@ -28,7 +28,7 @@ def score_coherence(docs, embeddings, min_cluster_size, min_samples):
         len(topics), len(topics) - not_found, len(top)))
 
     not_found = (topics_all == -1).sum()
-    logging.info('not found', not_found, not_found / len(topics_all))
+    logging.info(f'not found: {not_found} ({not_found / len(topics_all)})')
 
     dictionary = corpora.Dictionary(tokens)
 

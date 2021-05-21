@@ -3,7 +3,6 @@ from morfeusz_spacy_analyser import SpacyMorfeuszAnalyser
 import pandas as pd
 import numpy as np
 import pickle
-from multiprocessing import Pool
 from tqdm import tqdm
 from data import load_doc_tokens, total, model_path
 
@@ -14,7 +13,7 @@ embeddings_tfidf = tfidf_vectorizer.fit_transform(tqdm(tokens, total=total))
 
 print("Saving embeddings..")
 
-with open(model_path + 'tfidf-morf.pkl', "wb") as fOut:
+with open(model_path + 'embeddings/tfidf-spacy.pkl', "wb") as fOut:
     pickle.dump(embeddings_tfidf, fOut)
 
 print("done")
@@ -28,5 +27,5 @@ def get_top_tf_idf_words(response, top_n=10):
 tfidf_words = [get_top_tf_idf_words(x) for x in embeddings_tfidf]
 
 print("Saving words..")
-with open(model_path + 'tfidf-morf-top-words.pkl', "wb") as fOut:
+with open(model_path + 'tfidf-spacy-top-words.pkl', "wb") as fOut:
     pickle.dump(tfidf_words, fOut)
