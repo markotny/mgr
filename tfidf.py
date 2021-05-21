@@ -5,20 +5,9 @@ import numpy as np
 import pickle
 from multiprocessing import Pool
 from tqdm import tqdm
+from data import load_doc_tokens, total, model_path
 
-model_path = '/data/model/iii/'
-parsed_docs_file = model_path + 'spacy-docs/iii-spacy-docs'
-total = 291415
-
-def load(kad):
-    with open(f'{parsed_docs_file}-{kad}.pkl', "rb") as f:
-        while True:
-            try:
-                yield pickle.load(f)
-            except EOFError:
-                break
-
-tokens = (tokens for kad in range(1,9) for tokens in load(kad))
+tokens = load_doc_tokens()
 
 tfidf_vectorizer = TfidfVectorizer(analyzer=lambda x: x, min_df=5)
 embeddings_tfidf = tfidf_vectorizer.fit_transform(tqdm(tokens, total=total))

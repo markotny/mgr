@@ -2,13 +2,15 @@ import pickle
 from os import path
 import pandas as pd
 import numpy as np
+from sigsev_guard import sigsev_guard
 
-ENABLE_UMAP = True
-model_path = 'model/iii/'
+ENABLE_UMAP = False
+model_path = '/data/model/iii/'
+parsed_docs_file = model_path + 'spacy-docs/iii-spacy-docs'
+total = 291415
 
 if ENABLE_UMAP:
     import umap
-    from sigsev_guard import sigsev_guard
 
 DEFAULT, MEAN, LEXRANK_TOP1, LEXRANK_TOP5, LEXRANK_WEIGHTED, TFIDF_TOP1, TFIDF_TOP5, TFIDF_WEIGHTED, TFIDF_MORF = 'default', 'mean', 'lexrank-top1', 'lexrank-top5', 'lexrank-weighted', 'tfidf-top1', 'tfidf-top5', 'tfidf-weighted', 'tfidf-morf'
 LEXRANK_TOP1xTFIDF, LEXRANK_TOP3xTFIDF, LEXRANK_WEIGHTEDxTFIDF = 'lexrank-top1-xtfidf', 'lexrank-top3-xtfidf', 'lexrank-weighted-xtfidf'
@@ -95,3 +97,15 @@ def load_clean_df():
 
 def drop_text(df):
     return df.drop(columns="treść")
+
+
+def load(kad):
+    with open(f'{parsed_docs_file}-{kad}.pkl', "rb") as f:
+        while True:
+            try:
+                yield pickle.load(f)
+            except EOFError:
+                break
+
+def load_doc_tokens():
+    return (tokens for kad in range(1,9) for tokens in load(kad))
