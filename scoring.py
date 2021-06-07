@@ -15,9 +15,9 @@ TEST_SAMPLE_FRAC = 0.2
 
 def score_coherence(docs, embeddings, min_cluster_size, min_samples):
     topics_all = _check_topics(embeddings, min_cluster_size, min_samples)
-    if topics_all.max() > 1000:
-        logging.warning('more than 1000 topics - aborting')
-        return None, None, topics_all, (topics_all == -1).sum(), None
+    if topics_all.max() > 1000 or topics_all.max() < 20:
+        logging.warning(f'{topics_all.max()} topics - aborting')
+        return None, None, None, None, topics_all, (topics_all == -1).sum(), None
 
     topic_words, tokens, topics, topics_all = _prepare_bertopic(
         docs, embeddings, min_cluster_size, min_samples)
@@ -37,11 +37,22 @@ def score_coherence(docs, embeddings, min_cluster_size, min_samples):
     start = timer()
     score_u_mass = _score(topic_words, tokens, corpus,
                           dictionary, coherence='u_mass')
+    logging.info(f'scored u_mass in {timer() - start}')
+
     score_c_v = _score(topic_words, tokens, corpus,
                        dictionary, coherence='c_v')
+    logging.info(f'scored c_v in {timer() - start}')
 
-    logging.info(f'scored: {score_c_v}, {score_u_mass}. Took: {timer() - start}')
-    return score_c_v, score_u_mass, topics_all, not_found, len(topics)
+    score_c_uci = _score(topic_words, tokens, corpus,
+                       dictionary, coherence='c_uci')
+    logging.info(f'scored c_uci in {timer() - start}')
+
+    score_c_npmi = _score(topic_words, tokens, corpus,
+                       dictionary, coherence='c_npmi')
+    logging.info(f'scored c_npmi in {timer() - start}')
+
+    logging.info(f'scored all. Took: {timer() - start}')
+    return score_c_v, score_u_mass, score_c_uci, score_c_npmi, topics_all, not_found, len(topics)
 
 
 def _check_topics(umap_embeddings, min_cluster_size, min_samples):

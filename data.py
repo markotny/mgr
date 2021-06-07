@@ -5,16 +5,12 @@ import numpy as np
 from sigsev_guard import sigsev_guard
 
 ENABLE_UMAP = False
-model_path = '/data/model/iii/'
+model_path = 'model/iii/'
 parsed_docs_file = model_path + 'spacy-docs/iii-spacy-docs'
 total = 291415
 
 if ENABLE_UMAP:
     import umap
-
-DEFAULT, MEAN, LEXRANK_TOP1, LEXRANK_TOP5, LEXRANK_WEIGHTED, TFIDF_TOP1, TFIDF_TOP5, TFIDF_WEIGHTED, TFIDF_MORF = 'default', 'mean', 'lexrank-top1', 'lexrank-top5', 'lexrank-weighted', 'tfidf-top1', 'tfidf-top5', 'tfidf-weighted', 'tfidf-morf'
-LEXRANK_TOP1xTFIDF, LEXRANK_TOP3xTFIDF, LEXRANK_WEIGHTEDxTFIDF = 'lexrank-top1-xtfidf', 'lexrank-top3-xtfidf', 'lexrank-weighted-xtfidf'
-
 
 def emb_filename(emb, dim=None, n_neighbors=None):
     filename = emb if '.pkl' not in emb else emb[:-4]
@@ -36,7 +32,7 @@ def file_exists(name):
     return path.exists(model_path + name)
 
 
-@sigsev_guard(default_value=None, timeout=500)
+# @sigsev_guard(default_value=None, timeout=500)
 def load_and_reduce_dim(name, dim, n_neighbors):
     embeddings = load_file(emb_filename(name))
     metric = 'cosine' if 'tfidf' not in name else 'hellinger'
@@ -44,6 +40,7 @@ def load_and_reduce_dim(name, dim, n_neighbors):
     embeddings_mapped = umap.UMAP(n_neighbors=n_neighbors,
                                   n_components=dim,
                                   min_dist=0.0,
+                                  low_memory=True,
                                   metric=metric).fit_transform(embeddings)
 
     save_file(embeddings_mapped, emb_filename(name, dim, n_neighbors))
